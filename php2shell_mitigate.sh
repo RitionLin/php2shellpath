@@ -119,13 +119,17 @@ fi
 
 [ -n "$NGINX_BIN" ] && { "$NGINX_BIN" -s reload 2>/dev/null || systemctl reload nginx 2>/dev/null; }
 for s in /etc/init.d/php-fpm-*; do [ -x "$s" ] && "$s" reload >/dev/null 2>&1; done
-systemctl list-units --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -E '^php.*fpm' | xargs -r -n1 systemctl reload
+systemctl list-units --type=service --state=running --no-legend 2>/dev/null | awk '{print $1}' | grep -E '^php.*fpm' | xargs -r -n1 systemctl reload 2>/dev/null
 systemctl is-active --quiet apache2 2>/dev/null && systemctl reload apache2
 log "已重载服务"
 
 # ---------- 报告 ----------
 echo; echo "======== 结果 ========"
-for p in /www/server/php/*/bin/php /usr/bin/php*; do [ -x "$p" ] && echo "PHP: $p -> $($p -r 'echo PHP_VERSION;' 2>/dev/null)"; done
+for p in /www/server/php/*/bin/php /usr/bin/php /usr/bin/php[0-9]*; do
+  case "$(basename "$p")" in *fpm*|*phpize*|*config*|*cgi*|*dbg*|*pear*|*pecl*) continue;; esac
+  [ -x "$p" ] || continue
+  v=$("$p" -r 'echo PHP_VERSION;' 2>/dev/null </dev/null) && echo "PHP: $p -> $v"
+done
 echo "备份目录: $BK  (回滚: bash $0 --rollback)"
 echo; echo "---- 可疑迹象 ----"
 ps -eo user,pid,cmd | awk '$1~/^(www|www-data|nginx|apache)$/' | grep -E ' (sh|bash|dash|curl|wget|nc|python|perl)( |$)' || echo "未发现 web 用户启动的 shell/下载进程"
